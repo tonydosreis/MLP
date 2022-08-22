@@ -1,7 +1,5 @@
-from inspect import Parameter
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 
 def ReLU(x):
     if(x < 0):
@@ -24,18 +22,21 @@ step_vec = np.vectorize(step, otypes=[np.float64])
 
 class MLP():
 
-    def __init__(self, nx, nh, no):
+    def __init__(self, nx, nh1, nh2, no):
 
         self.nx = nx
-        self.nh = nh
+        self.nh1 = nh1
+        self.nh1 = nh2
         self.no = no
 
         #Creates and initializes parameters
         self.parameters = dict();
-        self.init_params("w0", (nh,nx))
-        self.init_params("b0", (nh, 1))
-        self.init_params("w1", (no,nh))
-        self.init_params("b1", (no, 1))
+        self.init_params("w0", (nh1,nx))
+        self.init_params("b0", (nh1, 1))
+        self.init_params("w1", (nh2,nh1))
+        self.init_params("b1", (nh2, 1))
+        self.init_params("w2", (no,nh2))
+        self.init_params("b2", (no, 1))
 
     def init_params(self, name, shape):
 
@@ -50,7 +51,6 @@ class MLP():
         #gradients are initialized with zeros
         self.parameters[name + "_grad"] = np.zeros( shape )
 
-    #------Checked-------# 
     #forward propagation
     def __call__(self,x):
 
@@ -61,9 +61,10 @@ class MLP():
         self.aux_values["x"] = x
 
         self.aux_values["a0"] = self.parameters["w0"]@x + self.parameters["b0"]
-
         self.aux_values["h0"] = ReLU_vec(self.aux_values["a0"])
-        self.aux_values["o"] = self.parameters["w1"]@self.aux_values["h0"] + self.parameters["b1"]
+        self.aux_values["a1"] = self.parameters["w1"]@self.aux_values["h0"] + self.parameters["b1"]
+        self.aux_values["h1"] = ReLU_vec(self.aux_values["a1"])
+        self.aux_values["o"] = self.parameters["w2"]@self.aux_values["h1"] + self.parameters["b2"]
 
         return self.aux_values["o"]
 
@@ -75,7 +76,9 @@ class MLP():
     def back_prop(self,y):
         
         self.aux_values["o_grad"] = -2*(y - self.aux_values["o"])
+
         self.aux_values["h0_grad"] = self.aux_values["o_grad"]*(self.parameters["w1"].T)
+
         self.aux_values["a0_grad"] = self.aux_values["h0_grad"]*step_vec(self.aux_values["h0"])
 
         self.parameters["b1_grad"] = (self.aux_values["o_grad"]*np.ones(self.parameters["b1"].shape)).mean(axis=1,keepdims = True)
@@ -84,28 +87,32 @@ class MLP():
         self.parameters["w1_grad"] = ((self.aux_values["o_grad"]*self.aux_values["h0"]).mean(axis = 1, keepdims = True)).T
         self.parameters["w0_grad"] = (np.expand_dims( self.aux_values["a0_grad"],1)*np.expand_dims( self.aux_values["x"],0)).mean(axis = 2)
 
-
     def back_prop2(self,y):
 
         self.aux_values["o_grad"] = -2*(y - self.aux_values["o"]).reshape(-1,1,1)
 
-        self.aux_values["h0_grad"] = self.aux_values["o_grad"]@np.expand_dims(self.parameters["w1"],axis = 0)
+        self.aux_values["h1_grad"] = self.aux_values["o_grad"]@np.expand_dims(self.parameters["w2"],axis = 0)
+        self.aux_values["a1_grad"] = self.aux_values["h1_grad"]*step_vec(np.expand_dims((self.aux_values["h1"].T),axis = 1))
+
+        self.aux_values["h0_grad"] = self.aux_values["a1_grad"]@np.expand_dims(self.parameters["w1"],axis = 0)
         self.aux_values["a0_grad"] = self.aux_values["h0_grad"]*step_vec(np.expand_dims((self.aux_values["h0"].T),axis = 1))
 
         self.parameters["b0_grad"] = (self.aux_values["a0_grad"].mean(axis = 0)).T
-        self.parameters["b1_grad"] = (self.aux_values["o_grad"].mean(axis = 0)).T
+        self.parameters["b1_grad"] = (self.aux_values["a1_grad"].mean(axis = 0)).T
+        self.parameters["b2_grad"] = (self.aux_values["o_grad"].mean(axis = 0)).T
 
-        self.parameters["w1_grad"] = (np.swapaxes(self.aux_values["o_grad"], 1,2)@np.expand_dims((self.aux_values["h0"].T), axis = 1)).mean(axis = 0)
+        self.parameters["w2_grad"] = (np.swapaxes(self.aux_values["o_grad"], 1,2)@np.expand_dims((self.aux_values["h1"].T), axis = 1)).mean(axis = 0)
+        self.parameters["w1_grad"] = (np.swapaxes(self.aux_values["a1_grad"], 1,2)@np.expand_dims((self.aux_values["h0"].T), axis = 1)).mean(axis = 0)
         self.parameters["w0_grad"] = (np.swapaxes(self.aux_values["a0_grad"], 1,2)@np.expand_dims((self.aux_values["x"].T), axis = 1)).mean(axis = 0)
-
 
     def gradient_descent(self, learning_rate):
         self.parameters["b0"] -= self.parameters["b0_grad"]*learning_rate
         self.parameters["b1"] -= self.parameters["b1_grad"]*learning_rate
-
+        self.parameters["b2"] -= self.parameters["b2_grad"]*learning_rate
 
         self.parameters["w0"] -= self.parameters["w0_grad"]*learning_rate
         self.parameters["w1"] -= self.parameters["w1_grad"]*learning_rate
+        self.parameters["w2"] -= self.parameters["w2_grad"]*learning_rate
 
 #test code
 
@@ -117,10 +124,11 @@ if __name__ == "__main__":
     markersize = 3
 
     nx = 1
-    nh = 100
+    nh1 = 200
+    nh2 = 200
     no = 1
     nb = 100
-    lr = 0.1
+    lr = .1
 
     epochs = 200
 
@@ -138,13 +146,12 @@ if __name__ == "__main__":
     ax[0].plot(x_train.flatten(),y_train.flatten(), "b", markersize = markersize)
     ax[1].plot(x_test.flatten(),y_test.flatten(), "b", markersize = markersize)
 
-    mlp = MLP(nx,nh,no)
+    mlp = MLP(nx,nh1,nh2,no)
 
     for epoch in range(epochs):
 
         mlp(x_train)
         loss = mlp.calc_loss(y_train)
-
         mlp.back_prop2(y_train)
         mlp.gradient_descent(lr)
 
