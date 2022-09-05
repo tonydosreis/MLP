@@ -2,12 +2,13 @@
 
 Currently supports:
 
--Regression
--Multiple hidden layers
+- Regression
+- Multiple hidden layers
 
 To-do:
 
--Experiment management system
--Creation of video showing the learning process
--Classification
--L2 regularization
+- Early Stopping
+- Experiment management system
+- Creation of video showing the learning process
+- Classification
+- L2 regularization
