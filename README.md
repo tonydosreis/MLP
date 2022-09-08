@@ -4,10 +4,10 @@ Currently supports:
 
 - Regression
 - Multiple hidden layers
+- Early Stopping
 
 To-do:
 
-- Early Stopping
 - Experiment management system
 - Creation of video showing the learning process
 - Classification
