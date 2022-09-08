@@ -67,6 +67,9 @@ class MLP():
     #forward propagation
     def __call__(self,x):
 
+        #reshapes to appropriate shape
+        x = MLP.reshape_data(x)
+
         #stores some intermediate values
         self.aux_values = dict()
 
@@ -85,10 +88,16 @@ class MLP():
 
     #Loss using outputs from previous call
     def calc_loss(self, y):
+
+        #reshapes to appropriate shape
+        y = MLP.reshape_data(y)
         return ((self.aux_values["o"] - y)**2).mean()
 
     #Currently using MSE loss
     def back_prop(self,y):
+
+        #reshapes to appropriate shape
+        y = MLP.reshape_data(y)
 
         self.aux_values["o_grad"] = -2*(y - self.aux_values["o"])
 
@@ -109,35 +118,73 @@ class MLP():
             self.parameters[f"b{i}"] -= self.aux_values[f"b{i}_grad"]*learning_rate
             self.parameters[f"w{i}"] -= self.aux_values[f"w{i}_grad"]*learning_rate
 
+
+    #reshapes data to be batches of column vectors
+    def reshape_data(x):
+        #x shape = (batch_dim, feature_dim)
+        #reshapes data be a batch of column vectors
+        (batch_size,feature_dim) = x.shape
+        new_x = x.reshape(batch_size,feature_dim,1)
+        #new x shape = (batch_dim, feature_dim, 1)
+
+        return new_x
+
+#trains neural network, has early stopping
+def trainer(x_train,y_train,x_val,y_val,network, lr, max_epochs = 10000, patience = 10, sensitivity = 0.05):
+
+    min_loss = np.inf
+    patience_left = patience
+    losses = []
+    for epoch in range(max_epochs):
+
+        #netowrk training
+        network(x_train)
+        network.back_prop(y_train)
+        network.gradient_descent(lr)
+
+        #network validation
+        network(x_val)
+        curr_loss = network.calc_loss(y_val)
+        losses.append(curr_loss)
+
+        #early stopping
+        if(curr_loss < (1 - sensitivity)*min_loss):
+
+            min_loss = curr_loss
+            patience_left = patience
+        else:
+            patience_left -= 1
+
+        if patience_left == 0:
+            break
+
+    print("Done training!")
+    return epoch, losses
+            
 #test code
-
-#Linear function
-def generate_data(x,M):
-    return M@x
-
-def generate_data_sin(x,f):
-    return np.sin(2*np.pi*f*x)
-
 if __name__ == "__main__":
 
-    markersize = 3
+    #Linear function
+    def generate_data(x,M):
+        return x@M
 
+    def generate_data_sin(x,f):
+        return np.sin(2*np.pi*f*x)
+
+    #Patameters
+    markersize = 3
     f = 0.4
     nx = 1
-    H = [10]
+    H = [10,10]
     no = 1
     nb_train = 100
     nb_test = 10
     lr = .01
 
-    epochs = 10000
-
-    x_train = np.sort(np.random.uniform(-2,2,(nb_train*nx))).reshape(nb_train,nx,1)
-
-    x_test = np.linspace(-2,2,(nb_test*nx)).reshape(nb_test,nx,1)
-
-    M = np.random.uniform(size = (1,no,nx))
-
+    #data generation
+    x_train = np.sort(np.random.uniform(-2,2,(nb_train*nx))).reshape(nb_train,nx)
+    x_test = np.linspace(-2,2,(nb_test*nx)).reshape(nb_test,nx)
+    M = np.random.uniform(size = (nx,no))
     y_train = generate_data(x_train,M)
     y_test = generate_data(x_test,M)
 
@@ -146,16 +193,9 @@ if __name__ == "__main__":
 
     mlp = MLP(nx,no, H)
 
-    for epoch in range(epochs):
+    epoch, losses = trainer(x_train, y_train, x_test, y_test, mlp, lr, max_epochs = 100000, patience = 1000 )
 
-        mlp(x_train)
-        loss = mlp.calc_loss(y_train)
-        print(f"Loss: {loss:.5f}")
-
-        mlp.back_prop(y_train)
-        mlp.gradient_descent(lr)
-
-    print("done training")
+    print(epoch)
 
     y_train_hat = mlp(x_train)
     y_test_hat = mlp(x_test)
@@ -171,4 +211,8 @@ if __name__ == "__main__":
     ax[1].plot(x_test.flatten(),y_test.flatten(), "b", markersize = markersize)
     ax[1].plot(x_test.flatten(),y_test_hat.flatten(), "r", markersize = markersize)
 
+    plt.show()
+
+    plt.figure()
+    plt.plot(losses)
     plt.show()
